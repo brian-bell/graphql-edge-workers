@@ -5,7 +5,7 @@ use std::pin::Pin;
 use serde::de::DeserializeOwned;
 use worker::{Fetch, Url};
 
-use crate::models::{CreateFlightInput, Flight};
+use crate::models::{CreateFlightInput, Flight, UpdateFlightInput};
 
 #[derive(Debug)]
 pub enum OriginError {
@@ -51,6 +51,15 @@ pub trait FlightApi: Send + Sync {
         &self,
         input: CreateFlightInput,
     ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>>;
+    fn update_flight(
+        &self,
+        id: String,
+        input: UpdateFlightInput,
+    ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>>;
+    fn delete_flight(
+        &self,
+        id: String,
+    ) -> Pin<Box<dyn Future<Output = Result<(), OriginError>> + '_>>;
 }
 
 pub struct OriginClient {
@@ -85,8 +94,9 @@ impl OriginClient {
             .map_err(|e| OriginError::Other(format!("Failed to parse response JSON: {e}")))
     }
 
-    async fn post<T: DeserializeOwned, B: serde::Serialize>(
+    async fn send_json<T: DeserializeOwned, B: serde::Serialize>(
         &self,
+        method: worker::Method,
         path: &str,
         body: &B,
     ) -> Result<T, OriginError> {
@@ -98,7 +108,7 @@ impl OriginClient {
             .map_err(|e| OriginError::Other(format!("Failed to serialize request body: {e}")))?;
 
         let mut request_init = worker::RequestInit::new();
-        request_init.with_method(worker::Method::Post);
+        request_init.with_method(method);
         request_init
             .headers
             .set("Content-Type", "application/json")
@@ -126,6 +136,29 @@ impl OriginClient {
 
         serde_json::from_str(&text)
             .map_err(|e| OriginError::Other(format!("Failed to parse response JSON: {e}")))
+    }
+
+    async fn delete(&self, path: &str) -> Result<(), OriginError> {
+        let url = format!("{}{}", self.base_url, path);
+        let parsed_url =
+            Url::parse(&url).map_err(|e| OriginError::Other(format!("Invalid URL: {e}")))?;
+
+        let mut request_init = worker::RequestInit::new();
+        request_init.with_method(worker::Method::Delete);
+
+        let request = worker::Request::new_with_init(parsed_url.as_str(), &request_init)
+            .map_err(|e| OriginError::Other(format!("Failed to create request: {e}")))?;
+
+        let response = Fetch::Request(request)
+            .send()
+            .await
+            .map_err(|e| OriginError::Other(format!("Fetch failed: {e}")))?;
+
+        if response.status_code() >= 400 {
+            return Err(OriginError::Status(response.status_code()));
+        }
+
+        Ok(())
     }
 }
 
@@ -155,6 +188,31 @@ impl FlightApi for OriginClient {
         &self,
         input: CreateFlightInput,
     ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
-        Box::pin(async move { self.post::<Flight, _>("/flights", &input).await })
+        Box::pin(async move {
+            self.send_json::<Flight, _>(worker::Method::Post, "/flights", &input)
+                .await
+        })
+    }
+
+    fn update_flight(
+        &self,
+        id: String,
+        input: UpdateFlightInput,
+    ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
+        Box::pin(async move {
+            let path = format!("/flights/{id}");
+            self.send_json::<Flight, _>(worker::Method::Put, &path, &input)
+                .await
+        })
+    }
+
+    fn delete_flight(
+        &self,
+        id: String,
+    ) -> Pin<Box<dyn Future<Output = Result<(), OriginError>> + '_>> {
+        Box::pin(async move {
+            let path = format!("/flights/{id}");
+            self.delete(&path).await
+        })
     }
 }

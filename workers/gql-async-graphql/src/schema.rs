@@ -2,7 +2,7 @@ use async_graphql::{Context, EmptySubscription, Object, Schema};
 use send_wrapper::SendWrapper;
 
 use crate::http_client::FlightApi;
-use crate::models::{CreateFlightInput, Flight};
+use crate::models::{CreateFlightInput, Flight, UpdateFlightInput};
 
 pub struct QueryRoot;
 
@@ -50,6 +50,30 @@ impl MutationRoot {
             .await
             .map_err(|e| e.to_string().into())
     }
+
+    async fn update_flight(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        input: UpdateFlightInput,
+    ) -> async_graphql::Result<Flight> {
+        let client = ctx.data::<Box<dyn FlightApi>>()?;
+        SendWrapper::new(client.update_flight(id, input))
+            .await
+            .map_err(|e| e.to_string().into())
+    }
+
+    async fn delete_flight(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+    ) -> async_graphql::Result<bool> {
+        let client = ctx.data::<Box<dyn FlightApi>>()?;
+        SendWrapper::new(client.delete_flight(id))
+            .await
+            .map(|()| true)
+            .map_err(|e| e.to_string().into())
+    }
 }
 
 pub type FlightSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
@@ -64,6 +88,7 @@ pub fn build_schema(client: Box<dyn FlightApi>) -> FlightSchema {
 mod tests {
     use super::*;
     use crate::http_client::OriginError;
+    use crate::models::UpdateFlightInput;
     use async_graphql::Request;
     use std::future::Future;
     use std::pin::Pin;
@@ -133,6 +158,43 @@ mod tests {
             };
             Box::pin(async move { Ok(flight) })
         }
+
+        fn update_flight(
+            &self,
+            id: String,
+            input: UpdateFlightInput,
+        ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
+            let result = self
+                .flights
+                .iter()
+                .find(|f| f.id == id)
+                .cloned()
+                .map(|mut f| {
+                    if let Some(date) = input.date {
+                        f.date = date;
+                    }
+                    if input.notes.is_some() {
+                        f.notes = input.notes;
+                    }
+                    f
+                })
+                .ok_or(OriginError::Status(404));
+            Box::pin(async move { result })
+        }
+
+        fn delete_flight(
+            &self,
+            id: String,
+        ) -> Pin<Box<dyn Future<Output = Result<(), OriginError>> + '_>> {
+            let exists = self.flights.iter().any(|f| f.id == id);
+            Box::pin(async move {
+                if exists {
+                    Ok(())
+                } else {
+                    Err(OriginError::Status(404))
+                }
+            })
+        }
     }
 
     /// Always returns Err for any call — simulates origin failures.
@@ -160,6 +222,21 @@ mod tests {
             &self,
             _input: CreateFlightInput,
         ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
+            Box::pin(async { Err(OriginError::Status(self.status)) })
+        }
+
+        fn update_flight(
+            &self,
+            _id: String,
+            _input: UpdateFlightInput,
+        ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
+            Box::pin(async { Err(OriginError::Status(self.status)) })
+        }
+
+        fn delete_flight(
+            &self,
+            _id: String,
+        ) -> Pin<Box<dyn Future<Output = Result<(), OriginError>> + '_>> {
             Box::pin(async { Err(OriginError::Status(self.status)) })
         }
     }
@@ -218,7 +295,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn schema_has_create_flight_mutation() {
+    async fn schema_has_all_mutations() {
         let schema = test_schema(MockFlightApi::new(vec![]));
         let resp = schema
             .execute(Request::new(
@@ -234,6 +311,8 @@ mod tests {
             .map(|f| f["name"].as_str().unwrap())
             .collect();
         assert!(fields.contains(&"createFlight"));
+        assert!(fields.contains(&"updateFlight"));
+        assert!(fields.contains(&"deleteFlight"));
     }
 
     #[tokio::test]
@@ -404,5 +483,57 @@ mod tests {
         let json = resp.data.into_json().unwrap();
         assert_eq!(json["createFlight"]["id"], "new-1");
         assert_eq!(json["createFlight"]["date"], "2026-03-08");
+    }
+
+    #[tokio::test]
+    async fn update_flight_returns_updated_flight() {
+        let schema = test_schema(MockFlightApi::new(vec![make_flight("f1", "2026-01-01")]));
+        let resp = schema
+            .execute(Request::new(
+                r#"mutation { updateFlight(id: "f1", input: { date: "2026-06-15", notes: "updated" }) { id date notes } }"#,
+            ))
+            .await;
+        assert!(resp.errors.is_empty());
+        let json = resp.data.into_json().unwrap();
+        assert_eq!(json["updateFlight"]["id"], "f1");
+        assert_eq!(json["updateFlight"]["date"], "2026-06-15");
+        assert_eq!(json["updateFlight"]["notes"], "updated");
+    }
+
+    #[tokio::test]
+    async fn update_flight_returns_error_for_missing() {
+        let schema = test_schema(MockFlightApi::new(vec![]));
+        let resp = schema
+            .execute(Request::new(
+                r#"mutation { updateFlight(id: "missing", input: { date: "2026-06-15" }) { id } }"#,
+            ))
+            .await;
+        assert!(!resp.errors.is_empty());
+        assert!(resp.errors[0].message.contains("404"));
+    }
+
+    #[tokio::test]
+    async fn delete_flight_returns_true() {
+        let schema = test_schema(MockFlightApi::new(vec![make_flight("f1", "2026-01-01")]));
+        let resp = schema
+            .execute(Request::new(
+                r#"mutation { deleteFlight(id: "f1") }"#,
+            ))
+            .await;
+        assert!(resp.errors.is_empty());
+        let json = resp.data.into_json().unwrap();
+        assert_eq!(json["deleteFlight"], true);
+    }
+
+    #[tokio::test]
+    async fn delete_flight_returns_error_for_missing() {
+        let schema = test_schema(MockFlightApi::new(vec![]));
+        let resp = schema
+            .execute(Request::new(
+                r#"mutation { deleteFlight(id: "missing") }"#,
+            ))
+            .await;
+        assert!(!resp.errors.is_empty());
+        assert!(resp.errors[0].message.contains("404"));
     }
 }
