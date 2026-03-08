@@ -1,8 +1,12 @@
+use std::sync::OnceLock;
+
 use http_body_util::BodyExt;
 use worker::*;
 
 use crate::http_client::OriginClient;
-use crate::schema;
+use crate::schema::{self, FlightSchema};
+
+static SCHEMA: OnceLock<FlightSchema> = OnceLock::new();
 
 pub fn health() -> Result<http::Response<String>> {
     Ok(http::Response::builder()
@@ -16,18 +20,23 @@ pub async fn graphql(
     req: HttpRequest,
     env: Env,
 ) -> Result<http::Response<String>> {
-    let origin_base_url = match env.var("ORIGIN_BASE_URL") {
-        Ok(v) => v.to_string(),
-        Err(_) => {
-            return Ok(http::Response::builder()
-                .status(502)
-                .header("content-type", "application/json")
-                .body(r#"{"error":"ORIGIN_BASE_URL not configured"}"#.to_string())
-                .unwrap());
+    let schema = match SCHEMA.get() {
+        Some(s) => s,
+        None => {
+            let origin_base_url = match env.var("ORIGIN_BASE_URL") {
+                Ok(v) => v.to_string(),
+                Err(_) => {
+                    return Ok(http::Response::builder()
+                        .status(502)
+                        .header("content-type", "application/json")
+                        .body(r#"{"error":"ORIGIN_BASE_URL not configured"}"#.to_string())
+                        .unwrap());
+                }
+            };
+            let client = OriginClient::new(origin_base_url);
+            SCHEMA.get_or_init(|| schema::build_schema(Box::new(client)))
         }
     };
-    let client = OriginClient::new(origin_base_url);
-    let schema = schema::build_schema(Box::new(client));
 
     let body = req
         .into_body()
