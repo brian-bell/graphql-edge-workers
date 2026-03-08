@@ -1,6 +1,7 @@
 use worker::*;
 
 mod handler;
+mod http_client;
 mod schema;
 
 #[event(fetch)]
