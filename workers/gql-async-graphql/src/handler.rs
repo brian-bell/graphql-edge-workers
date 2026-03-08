@@ -29,7 +29,7 @@ pub async fn graphql(
                     return Ok(http::Response::builder()
                         .status(502)
                         .header("content-type", "application/json")
-                        .body(r#"{"error":"ORIGIN_BASE_URL not configured"}"#.to_string())
+                        .body(r#"{"error":"Service misconfigured"}"#.to_string())
                         .unwrap());
                 }
             };
