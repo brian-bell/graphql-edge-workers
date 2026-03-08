@@ -84,7 +84,8 @@ impl OriginClient {
         body: &B,
     ) -> Result<T, OriginError> {
         let url = format!("{}{}", self.base_url, path);
-        Url::parse(&url).map_err(|e| OriginError::Other(format!("Invalid URL: {e}")))?;
+        let parsed_url =
+            Url::parse(&url).map_err(|e| OriginError::Other(format!("Invalid URL: {e}")))?;
 
         let body_json = serde_json::to_string(body)
             .map_err(|e| OriginError::Other(format!("Failed to serialize request body: {e}")))?;
@@ -99,7 +100,7 @@ impl OriginClient {
             })?;
         request_init.with_body(Some(worker::wasm_bindgen::JsValue::from_str(&body_json)));
 
-        let request = worker::Request::new_with_init(&url, &request_init)
+        let request = worker::Request::new_with_init(parsed_url.as_str(), &request_init)
             .map_err(|e| OriginError::Other(format!("Failed to create request: {e}")))?;
 
         let mut response = Fetch::Request(request)

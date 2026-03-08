@@ -28,8 +28,8 @@ impl QueryRoot {
         offset: Option<i32>,
     ) -> async_graphql::Result<Vec<Flight>> {
         let client = ctx.data::<Box<dyn FlightApi>>()?;
-        let limit = limit.unwrap_or(20);
-        let offset = offset.unwrap_or(0);
+        let limit = limit.unwrap_or(20).max(0);
+        let offset = offset.unwrap_or(0).max(0);
         SendWrapper::new(client.get_flights(limit, offset))
             .await
             .map_err(|e| e.to_string().into())
