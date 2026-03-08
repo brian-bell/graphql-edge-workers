@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
         run: cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
 
       - name: Deploy to Cloudflare
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: false # disabled until Cloudflare secrets are configured
         working-directory: workers/gql-async-graphql
         run: npx wrangler deploy
         env:
