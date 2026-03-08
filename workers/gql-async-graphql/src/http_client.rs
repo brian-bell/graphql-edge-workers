@@ -30,6 +30,13 @@ impl fmt::Display for OriginError {
     }
 }
 
+/// Abstraction over the origin flight API, enabling mock-based testing.
+///
+/// `Send + Sync` bounds are required by `async-graphql`'s context data storage.
+/// In WASM (single-threaded), `OriginClient` satisfies these since it only holds
+/// a `String`. The `!Send` futures from `worker::Fetch` are wrapped with
+/// `SendWrapper` at the call site in `schema.rs`, which is safe because WASM
+/// never moves values across threads.
 pub trait FlightApi: Send + Sync {
     fn get_flight(
         &self,
