@@ -1,4 +1,4 @@
-use async_graphql::{Context, EmptySubscription, Object, Schema};
+use async_graphql::{Context, EmptySubscription, Object, Schema, ID};
 use send_wrapper::SendWrapper;
 
 use crate::http_client::FlightApi;
@@ -11,10 +11,10 @@ impl QueryRoot {
     async fn flight(
         &self,
         ctx: &Context<'_>,
-        id: String,
+        id: ID,
     ) -> async_graphql::Result<Option<Flight>> {
         let client = ctx.data::<Box<dyn FlightApi>>()?;
-        match SendWrapper::new(client.get_flight(id)).await {
+        match SendWrapper::new(client.get_flight(id.to_string())).await {
             Ok(flight) => Ok(Some(flight)),
             Err(e) if e.is_not_found() => Ok(None),
             Err(e) => Err(e.to_string().into()),
@@ -54,11 +54,11 @@ impl MutationRoot {
     async fn update_flight(
         &self,
         ctx: &Context<'_>,
-        id: String,
+        id: ID,
         input: UpdateFlightInput,
     ) -> async_graphql::Result<Flight> {
         let client = ctx.data::<Box<dyn FlightApi>>()?;
-        SendWrapper::new(client.update_flight(id, input))
+        SendWrapper::new(client.update_flight(id.to_string(), input))
             .await
             .map_err(|e| e.to_string().into())
     }
@@ -66,10 +66,10 @@ impl MutationRoot {
     async fn delete_flight(
         &self,
         ctx: &Context<'_>,
-        id: String,
+        id: ID,
     ) -> async_graphql::Result<bool> {
         let client = ctx.data::<Box<dyn FlightApi>>()?;
-        SendWrapper::new(client.delete_flight(id))
+        SendWrapper::new(client.delete_flight(id.to_string()))
             .await
             .map(|()| true)
             .map_err(|e| e.to_string().into())
