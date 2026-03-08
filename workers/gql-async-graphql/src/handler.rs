@@ -16,7 +16,16 @@ pub async fn graphql(
     req: HttpRequest,
     env: Env,
 ) -> Result<http::Response<String>> {
-    let origin_base_url = env.var("ORIGIN_BASE_URL")?.to_string();
+    let origin_base_url = match env.var("ORIGIN_BASE_URL") {
+        Ok(v) => v.to_string(),
+        Err(_) => {
+            return Ok(http::Response::builder()
+                .status(502)
+                .header("content-type", "application/json")
+                .body(r#"{"error":"ORIGIN_BASE_URL not configured"}"#.to_string())
+                .unwrap());
+        }
+    };
     let client = OriginClient::new(origin_base_url);
     let schema = schema::build_schema(client);
 
