@@ -16,6 +16,29 @@ docs/
 .github/workflows/              # one CI/CD workflow per worker
 ```
 
+## Build & Test Commands
+
+`cargo` is not on the default PATH in this environment. Prefix commands with:
+
+```sh
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+**Run tests** (native, not WASM):
+```sh
+cargo test -p gql-async-graphql
+```
+
+**Build for WASM**:
+```sh
+cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
+```
+
+**Run locally** (from worker directory):
+```sh
+cd workers/gql-async-graphql && npx wrangler dev
+```
+
 ## Key Constraints
 
 - Each worker crate is fully independent — no shared crates or cross-dependencies
