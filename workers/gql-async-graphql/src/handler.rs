@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Limited};
 use worker::*;
 
 use crate::http_client::OriginClient;
@@ -39,16 +39,21 @@ pub async fn graphql(
         SCHEMA.get_or_init(|| schema::build_schema(Box::new(client)))
     };
 
+    // Fast-reject via Content-Length before reading any bytes
     if let Some(resp) = reject_oversized_body(req.headers()) {
         return Ok(resp);
     }
 
-    let body = req
-        .into_body()
+    // Hard limit during collection — catches missing/lying Content-Length
+    let body = match Limited::new(req.into_body(), MAX_BODY_SIZE as usize)
         .collect()
         .await
-        .map_err(|e| worker::Error::RustError(format!("Failed to read body: {e}")))?
-        .to_bytes();
+    {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => {
+            return Ok(payload_too_large_response());
+        }
+    };
 
     let gql_request: async_graphql::Request = match serde_json::from_slice(&body) {
         Ok(r) => r,
@@ -85,16 +90,18 @@ fn reject_oversized_body(headers: &http::HeaderMap) -> Option<http::Response<Str
         .parse::<u64>()
         .ok()?;
     if len > MAX_BODY_SIZE {
-        Some(
-            http::Response::builder()
-                .status(413)
-                .header("content-type", "application/json")
-                .body(r#"{"error":"Request body too large"}"#.to_string())
-                .unwrap(),
-        )
+        Some(payload_too_large_response())
     } else {
         None
     }
+}
+
+fn payload_too_large_response() -> http::Response<String> {
+    http::Response::builder()
+        .status(413)
+        .header("content-type", "application/json")
+        .body(r#"{"error":"Request body too large"}"#.to_string())
+        .unwrap()
 }
 
 #[cfg(test)]
