@@ -1,0 +1,17 @@
+{
+  "planPath": "docs/plans/2026-03-08-gql-custom-parser.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Scaffold gql-custom-parser crate", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Add health endpoint and routing", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: Implement the lexer", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Define AST types", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Implement the parser", "status": "pending", "blockedBy": [3]},
+    {"id": 5, "subject": "Task 5: Implement schema definition and validation", "status": "pending", "blockedBy": [4]},
+    {"id": 6, "subject": "Task 6: Implement execution engine", "status": "pending", "blockedBy": [5]},
+    {"id": 7, "subject": "Task 7: Implement HTTP client", "status": "pending", "blockedBy": [6]},
+    {"id": 8, "subject": "Task 8: Wire everything into handler", "status": "pending", "blockedBy": [7]},
+    {"id": 9, "subject": "Task 9: Add GitHub Actions workflow", "status": "pending", "blockedBy": [8]},
+    {"id": 10, "subject": "Task 10: End-to-end smoke test", "status": "pending", "blockedBy": [9]}
+  ],
+  "lastUpdated": "2026-03-08T00:00:00Z"
+}
