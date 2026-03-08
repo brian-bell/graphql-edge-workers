@@ -6,6 +6,8 @@ use worker::*;
 use crate::http_client::OriginClient;
 use crate::schema::{self, FlightSchema};
 
+// WASM is single-threaded, so OnceLock never actually races. The get()
+// fast-path avoids re-reading the env var on every request after init.
 static SCHEMA: OnceLock<FlightSchema> = OnceLock::new();
 
 pub fn health() -> Result<http::Response<String>> {
@@ -20,22 +22,21 @@ pub async fn graphql(
     req: HttpRequest,
     env: Env,
 ) -> Result<http::Response<String>> {
-    let schema = match SCHEMA.get() {
-        Some(s) => s,
-        None => {
-            let origin_base_url = match env.var("ORIGIN_BASE_URL") {
-                Ok(v) => v.to_string(),
-                Err(_) => {
-                    return Ok(http::Response::builder()
-                        .status(502)
-                        .header("content-type", "application/json")
-                        .body(r#"{"error":"Service misconfigured"}"#.to_string())
-                        .unwrap());
-                }
-            };
-            let client = OriginClient::new(origin_base_url);
-            SCHEMA.get_or_init(|| schema::build_schema(Box::new(client)))
-        }
+    let schema = if let Some(s) = SCHEMA.get() {
+        s
+    } else {
+        let origin_base_url = match env.var("ORIGIN_BASE_URL") {
+            Ok(v) => v.to_string(),
+            Err(_) => {
+                return Ok(http::Response::builder()
+                    .status(502)
+                    .header("content-type", "application/json")
+                    .body(r#"{"error":"Service misconfigured"}"#.to_string())
+                    .unwrap());
+            }
+        };
+        let client = OriginClient::new(origin_base_url);
+        SCHEMA.get_or_init(|| schema::build_schema(Box::new(client)))
     };
 
     if let Some(resp) = reject_oversized_body(req.headers()) {
