@@ -1,0 +1,57 @@
+name: gql-async-graphql
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/gql-async-graphql/**'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+  pull_request:
+    paths:
+      - 'workers/gql-async-graphql/**'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-async-graphql-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Deploy to Cloudflare
+        working-directory: workers/gql-async-graphql
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
