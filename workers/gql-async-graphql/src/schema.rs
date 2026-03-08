@@ -16,8 +16,8 @@ impl QueryRoot {
         let client = ctx.data::<Box<dyn FlightApi>>()?;
         match SendWrapper::new(client.get_flight(id)).await {
             Ok(flight) => Ok(Some(flight)),
-            Err(e) if e.contains("404") => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) if e.is_not_found() => Ok(None),
+            Err(e) => Err(e.to_string().into()),
         }
     }
 
@@ -32,7 +32,7 @@ impl QueryRoot {
         let offset = offset.unwrap_or(0);
         SendWrapper::new(client.get_flights(limit, offset))
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| e.to_string().into())
     }
 }
 
@@ -48,7 +48,7 @@ impl MutationRoot {
         let client = ctx.data::<Box<dyn FlightApi>>()?;
         SendWrapper::new(client.create_flight(input))
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| e.to_string().into())
     }
 }
 
@@ -63,6 +63,7 @@ pub fn build_schema(client: Box<dyn FlightApi>) -> FlightSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::http_client::OriginError;
     use async_graphql::Request;
     use std::future::Future;
     use std::pin::Pin;
@@ -81,13 +82,13 @@ mod tests {
         fn get_flight(
             &self,
             id: String,
-        ) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
             let result = self
                 .flights
                 .iter()
                 .find(|f| f.id == id)
                 .cloned()
-                .ok_or_else(|| "Origin returned status 404".to_string());
+                .ok_or(OriginError::Status(404));
             Box::pin(async move { result })
         }
 
@@ -95,7 +96,7 @@ mod tests {
             &self,
             limit: i32,
             offset: i32,
-        ) -> Pin<Box<dyn Future<Output = Result<Vec<Flight>, String>> + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<Flight>, OriginError>> + '_>> {
             let result: Vec<Flight> = self
                 .flights
                 .iter()
@@ -109,7 +110,7 @@ mod tests {
         fn create_flight(
             &self,
             input: CreateFlightInput,
-        ) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
             let flight = Flight {
                 id: "new-1".to_string(),
                 date: input.date,
@@ -136,30 +137,30 @@ mod tests {
 
     /// Always returns Err for any call — simulates origin failures.
     struct FailingFlightApi {
-        error: String,
+        status: u16,
     }
 
     impl FlightApi for FailingFlightApi {
         fn get_flight(
             &self,
             _id: String,
-        ) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>> {
-            Box::pin(async { Err(self.error.clone()) })
+        ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
+            Box::pin(async { Err(OriginError::Status(self.status)) })
         }
 
         fn get_flights(
             &self,
             _limit: i32,
             _offset: i32,
-        ) -> Pin<Box<dyn Future<Output = Result<Vec<Flight>, String>> + '_>> {
-            Box::pin(async { Err(self.error.clone()) })
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<Flight>, OriginError>> + '_>> {
+            Box::pin(async { Err(OriginError::Status(self.status)) })
         }
 
         fn create_flight(
             &self,
             _input: CreateFlightInput,
-        ) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>> {
-            Box::pin(async { Err(self.error.clone()) })
+        ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
+            Box::pin(async { Err(OriginError::Status(self.status)) })
         }
     }
 
@@ -190,10 +191,8 @@ mod tests {
         build_schema(Box::new(mock))
     }
 
-    fn failing_schema(error: &str) -> FlightSchema {
-        build_schema(Box::new(FailingFlightApi {
-            error: error.to_string(),
-        }))
+    fn failing_schema(status: u16) -> FlightSchema {
+        build_schema(Box::new(FailingFlightApi { status }))
     }
 
     // --- Schema introspection tests ---
@@ -294,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn flight_returns_error_for_non_404() {
-        let schema = failing_schema("Origin returned status 500");
+        let schema = failing_schema(500);
         let resp = schema
             .execute(Request::new(r#"{ flight(id: "f1") { id } }"#))
             .await;
