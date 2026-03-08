@@ -111,7 +111,7 @@ mod tests {
             let result = self
                 .flights
                 .iter()
-                .find(|f| f.id == id)
+                .find(|f| f.id.as_str() == id)
                 .cloned()
                 .ok_or(OriginError::Status(404));
             Box::pin(async move { result })
@@ -137,7 +137,7 @@ mod tests {
             input: CreateFlightInput,
         ) -> Pin<Box<dyn Future<Output = Result<Flight, OriginError>> + '_>> {
             let flight = Flight {
-                id: "new-1".to_string(),
+                id: "new-1".into(),
                 date: input.date,
                 aircraft_title: input.aircraft_title,
                 aircraft_registration: input.aircraft_registration,
@@ -167,7 +167,7 @@ mod tests {
             let result = self
                 .flights
                 .iter()
-                .find(|f| f.id == id)
+                .find(|f| f.id.as_str() == id)
                 .cloned()
                 .map(|mut f| {
                     if let Some(date) = input.date {
@@ -186,7 +186,7 @@ mod tests {
             &self,
             id: String,
         ) -> Pin<Box<dyn Future<Output = Result<(), OriginError>> + '_>> {
-            let exists = self.flights.iter().any(|f| f.id == id);
+            let exists = self.flights.iter().any(|f| f.id.as_str() == id);
             Box::pin(async move {
                 if exists {
                     Ok(())
@@ -243,7 +243,7 @@ mod tests {
 
     fn make_flight(id: &str, date: &str) -> Flight {
         Flight {
-            id: id.to_string(),
+            id: id.into(),
             date: date.to_string(),
             aircraft_title: None,
             aircraft_registration: None,
@@ -343,6 +343,27 @@ mod tests {
         ] {
             assert!(fields.contains(&expected), "missing field: {expected}");
         }
+    }
+
+    #[tokio::test]
+    async fn flight_id_is_graphql_id_scalar() {
+        let schema = test_schema(MockFlightApi::new(vec![]));
+        let resp = schema
+            .execute(Request::new(
+                r#"{ __type(name: "Flight") { fields { name type { kind ofType { name } } } } }"#,
+            ))
+            .await;
+        assert!(resp.errors.is_empty());
+        let json = resp.data.into_json().unwrap();
+        let id_field = json["__type"]["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["name"] == "id")
+            .expect("id field not found");
+        // id is ID! (NON_NULL wrapping the ID scalar)
+        assert_eq!(id_field["type"]["kind"], "NON_NULL");
+        assert_eq!(id_field["type"]["ofType"]["name"], "ID");
     }
 
     // --- Resolver tests ---

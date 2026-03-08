@@ -1,10 +1,10 @@
-use async_graphql::{InputObject, SimpleObject};
+use async_graphql::{InputObject, SimpleObject, ID};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, SimpleObject)]
 #[serde(rename_all = "camelCase")]
 pub struct Flight {
-    pub id: String,
+    pub id: ID,
     pub date: String,
     pub aircraft_title: Option<String>,
     pub aircraft_registration: Option<String>,
