@@ -38,6 +38,17 @@ pub async fn graphql(
         }
     };
 
+    const MAX_BODY_SIZE: u64 = 8_192; // 8 KB
+    if let Some(len) = req.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok()) {
+        if len > MAX_BODY_SIZE {
+            return Ok(http::Response::builder()
+                .status(413)
+                .header("content-type", "application/json")
+                .body(r#"{"error":"Request body too large"}"#.to_string())
+                .unwrap());
+        }
+    }
+
     let body = req
         .into_body()
         .collect()
