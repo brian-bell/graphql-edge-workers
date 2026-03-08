@@ -38,7 +38,7 @@ impl OriginClient {
         body: &B,
     ) -> Result<T, String> {
         let url = format!("{}{}", self.base_url, path);
-        let parsed_url = Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
+        Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
 
         let body_json = serde_json::to_string(body)
             .map_err(|e| format!("Failed to serialize request body: {e}"))?;

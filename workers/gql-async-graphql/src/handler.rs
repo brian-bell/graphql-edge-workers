@@ -1,6 +1,7 @@
 use http_body_util::BodyExt;
 use worker::*;
 
+use crate::http_client::OriginClient;
 use crate::schema;
 
 pub fn health() -> Result<http::Response<String>> {
@@ -16,7 +17,8 @@ pub async fn graphql(
     env: Env,
 ) -> Result<http::Response<String>> {
     let origin_base_url = env.var("ORIGIN_BASE_URL")?.to_string();
-    let schema = schema::build_schema(origin_base_url);
+    let client = OriginClient::new(origin_base_url);
+    let schema = schema::build_schema(client);
 
     let body = req
         .into_body()
