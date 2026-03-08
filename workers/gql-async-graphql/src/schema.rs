@@ -344,6 +344,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn flights_clamps_negative_limit_to_zero() {
+        let flights: Vec<Flight> = (0..3)
+            .map(|i| make_flight(&format!("f{i}"), "2026-01-01"))
+            .collect();
+        let schema = test_schema(MockFlightApi::new(flights));
+        let resp = schema
+            .execute(Request::new("{ flights(limit: -5) { id } }"))
+            .await;
+        assert!(resp.errors.is_empty());
+        let json = resp.data.into_json().unwrap();
+        let arr = json["flights"].as_array().unwrap();
+        assert_eq!(arr.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn flights_clamps_limit_to_max_100() {
+        let flights: Vec<Flight> = (0..3)
+            .map(|i| make_flight(&format!("f{i}"), "2026-01-01"))
+            .collect();
+        let schema = test_schema(MockFlightApi::new(flights));
+        // Request limit=999 but mock only has 3 items — the point is
+        // that the value forwarded to the API is clamped to 100, not 999.
+        let resp = schema
+            .execute(Request::new("{ flights(limit: 999) { id } }"))
+            .await;
+        assert!(resp.errors.is_empty());
+        let json = resp.data.into_json().unwrap();
+        let arr = json["flights"].as_array().unwrap();
+        // Mock has only 3, so we get 3 (limit=100 > 3)
+        assert_eq!(arr.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn flights_clamps_negative_offset_to_zero() {
+        let flights: Vec<Flight> = (0..3)
+            .map(|i| make_flight(&format!("f{i}"), "2026-01-01"))
+            .collect();
+        let schema = test_schema(MockFlightApi::new(flights));
+        let resp = schema
+            .execute(Request::new("{ flights(offset: -10) { id } }"))
+            .await;
+        assert!(resp.errors.is_empty());
+        let json = resp.data.into_json().unwrap();
+        let arr = json["flights"].as_array().unwrap();
+        // offset clamped to 0, default limit=20, so all 3 returned
+        assert_eq!(arr.len(), 3);
+    }
+
+    #[tokio::test]
     async fn create_flight_returns_created_flight() {
         let schema = test_schema(MockFlightApi::new(vec![]));
         let resp = schema

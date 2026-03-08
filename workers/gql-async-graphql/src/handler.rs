@@ -38,15 +38,8 @@ pub async fn graphql(
         }
     };
 
-    const MAX_BODY_SIZE: u64 = 8_192; // 8 KB
-    if let Some(len) = req.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok()) {
-        if len > MAX_BODY_SIZE {
-            return Ok(http::Response::builder()
-                .status(413)
-                .header("content-type", "application/json")
-                .body(r#"{"error":"Request body too large"}"#.to_string())
-                .unwrap());
-        }
+    if let Some(resp) = reject_oversized_body(req.headers()) {
+        return Ok(resp);
     }
 
     let body = req
@@ -79,4 +72,66 @@ pub async fn graphql(
         .header("content-type", "application/json")
         .body(response_body)
         .unwrap())
+}
+
+const MAX_BODY_SIZE: u64 = 8_192; // 8 KB
+
+fn reject_oversized_body(headers: &http::HeaderMap) -> Option<http::Response<String>> {
+    let len = headers
+        .get("content-length")?
+        .to_str()
+        .ok()?
+        .parse::<u64>()
+        .ok()?;
+    if len > MAX_BODY_SIZE {
+        Some(
+            http::Response::builder()
+                .status(413)
+                .header("content-type", "application/json")
+                .body(r#"{"error":"Request body too large"}"#.to_string())
+                .unwrap(),
+        )
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_body_over_8kb() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-length", "10000".parse().unwrap());
+        let resp = reject_oversized_body(&headers).expect("should reject");
+        assert_eq!(resp.status(), 413);
+    }
+
+    #[test]
+    fn allows_body_at_8kb() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-length", "8192".parse().unwrap());
+        assert!(reject_oversized_body(&headers).is_none());
+    }
+
+    #[test]
+    fn allows_body_under_8kb() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-length", "100".parse().unwrap());
+        assert!(reject_oversized_body(&headers).is_none());
+    }
+
+    #[test]
+    fn allows_missing_content_length() {
+        let headers = http::HeaderMap::new();
+        assert!(reject_oversized_body(&headers).is_none());
+    }
+
+    #[test]
+    fn allows_invalid_content_length() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-length", "not-a-number".parse().unwrap());
+        assert!(reject_oversized_body(&headers).is_none());
+    }
 }
