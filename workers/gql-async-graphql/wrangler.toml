@@ -1,0 +1,9 @@
+name = "gql-async-graphql"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-03-08"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+[vars]
+ORIGIN_BASE_URL = "http://localhost:8080"
