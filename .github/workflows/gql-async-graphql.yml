@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,19 +41,8 @@ jobs:
       - name: Build
         run: cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
 
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
       - name: Deploy to Cloudflare
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         working-directory: workers/gql-async-graphql
         run: npx wrangler deploy
         env:
