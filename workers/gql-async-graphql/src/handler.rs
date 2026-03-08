@@ -27,7 +27,7 @@ pub async fn graphql(
         }
     };
     let client = OriginClient::new(origin_base_url);
-    let schema = schema::build_schema(client);
+    let schema = schema::build_schema(Box::new(client));
 
     let body = req
         .into_body()

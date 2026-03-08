@@ -2,6 +2,7 @@ use worker::*;
 
 mod handler;
 mod http_client;
+mod models;
 mod schema;
 
 #[event(fetch)]

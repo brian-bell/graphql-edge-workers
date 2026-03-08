@@ -1,5 +1,23 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use serde::de::DeserializeOwned;
 use worker::{Fetch, Url};
+
+use crate::models::{CreateFlightInput, Flight};
+
+pub trait FlightApi: Send + Sync {
+    fn get_flight(&self, id: String) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>>;
+    fn get_flights(
+        &self,
+        limit: i32,
+        offset: i32,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Flight>, String>> + '_>>;
+    fn create_flight(
+        &self,
+        input: CreateFlightInput,
+    ) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>>;
+}
 
 pub struct OriginClient {
     base_url: String,
@@ -10,7 +28,7 @@ impl OriginClient {
         Self { base_url }
     }
 
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, String> {
+    async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, String> {
         let url = format!("{}{}", self.base_url, path);
         let parsed_url = Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
 
@@ -32,7 +50,7 @@ impl OriginClient {
             .map_err(|e| format!("Failed to parse response JSON: {e}"))
     }
 
-    pub async fn post<T: DeserializeOwned, B: serde::Serialize>(
+    async fn post<T: DeserializeOwned, B: serde::Serialize>(
         &self,
         path: &str,
         body: &B,
@@ -45,6 +63,10 @@ impl OriginClient {
 
         let mut request_init = worker::RequestInit::new();
         request_init.with_method(worker::Method::Post);
+        request_init
+            .headers
+            .set("Content-Type", "application/json")
+            .map_err(|e| format!("Failed to set Content-Type header: {e}"))?;
         request_init.with_body(Some(worker::wasm_bindgen::JsValue::from_str(&body_json)));
 
         let request = worker::Request::new_with_init(&url, &request_init)
@@ -66,5 +88,32 @@ impl OriginClient {
 
         serde_json::from_str(&text)
             .map_err(|e| format!("Failed to parse response JSON: {e}"))
+    }
+}
+
+impl FlightApi for OriginClient {
+    fn get_flight(&self, id: String) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>> {
+        Box::pin(async move {
+            let path = format!("/flights/{id}");
+            self.get::<Flight>(&path).await
+        })
+    }
+
+    fn get_flights(
+        &self,
+        limit: i32,
+        offset: i32,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Flight>, String>> + '_>> {
+        Box::pin(async move {
+            let path = format!("/flights?limit={limit}&offset={offset}");
+            self.get::<Vec<Flight>>(&path).await
+        })
+    }
+
+    fn create_flight(
+        &self,
+        input: CreateFlightInput,
+    ) -> Pin<Box<dyn Future<Output = Result<Flight, String>> + '_>> {
+        Box::pin(async move { self.post::<Flight, _>("/flights", &input).await })
     }
 }
