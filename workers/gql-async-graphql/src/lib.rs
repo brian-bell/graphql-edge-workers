@@ -1,6 +1,7 @@
 use worker::*;
 
 mod handler;
+mod schema;
 
 #[event(fetch)]
 async fn fetch(
