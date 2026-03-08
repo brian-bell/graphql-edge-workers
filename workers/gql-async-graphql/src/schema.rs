@@ -102,7 +102,17 @@ mod tests {
     async fn test_flights_query_returns_empty_list() {
         let schema = build_schema("http://fake-origin.test".to_string());
         let resp = schema.execute(Request::new("{ flights { id } }")).await;
-        // Should not panic — schema is valid and query parses
         assert!(resp.errors.is_empty() || !resp.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_flights_query_returns_empty_vec() {
+        let schema = build_schema("http://fake-origin.test".to_string());
+        let resp = schema
+            .execute(Request::new("{ flights { id date } }"))
+            .await;
+        assert!(resp.errors.is_empty());
+        let data = resp.data.into_json().unwrap();
+        assert_eq!(data, serde_json::json!({"flights": []}));
     }
 }

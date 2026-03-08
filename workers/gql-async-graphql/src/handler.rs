@@ -1,4 +1,7 @@
+use http_body_util::BodyExt;
 use worker::*;
+
+use crate::schema;
 
 pub fn health() -> Result<http::Response<String>> {
     Ok(http::Response::builder()
@@ -9,12 +12,40 @@ pub fn health() -> Result<http::Response<String>> {
 }
 
 pub async fn graphql(
-    _req: HttpRequest,
-    _env: Env,
+    req: HttpRequest,
+    env: Env,
 ) -> Result<http::Response<String>> {
+    let origin_base_url = env.var("ORIGIN_BASE_URL")?.to_string();
+    let schema = schema::build_schema(origin_base_url);
+
+    let body = req
+        .into_body()
+        .collect()
+        .await
+        .map_err(|e| worker::Error::RustError(format!("Failed to read body: {e}")))?
+        .to_bytes();
+
+    let gql_request: async_graphql::Request = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            let error_body = serde_json::json!({
+                "data": null,
+                "errors": [{"message": format!("Invalid request body: {e}")}]
+            });
+            return Ok(http::Response::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(serde_json::to_string(&error_body).unwrap())
+                .unwrap());
+        }
+    };
+
+    let gql_response = schema.execute(gql_request).await;
+    let response_body = serde_json::to_string(&gql_response).unwrap();
+
     Ok(http::Response::builder()
         .status(200)
         .header("content-type", "application/json")
-        .body(r#"{"data":null}"#.to_string())
+        .body(response_body)
         .unwrap())
 }
