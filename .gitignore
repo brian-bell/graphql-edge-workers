@@ -2,3 +2,11 @@ target/
 build/
 .worktrees/
 .wrangler/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+infra/terraform/cloudflare/backend.hcl
+infra/terraform/cloudflare/ci.backend.hcl
