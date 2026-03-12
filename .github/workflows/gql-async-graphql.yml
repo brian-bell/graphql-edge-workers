@@ -170,10 +170,10 @@ jobs:
 
           {
             echo "<!-- terraform-plan:gql-async-graphql -->"
-            echo "## Terraform Plan (`gql-async-graphql`)"
+            echo '## Terraform Plan (`gql-async-graphql`)'
             echo
             echo "- Status: ${status_line}"
-            echo "- Stack: \`infra/terraform/cloudflare\`"
+            echo '- Stack: `infra/terraform/cloudflare`'
             echo
             if [ -n "$truncated_note" ]; then
               echo "$truncated_note"
