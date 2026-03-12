@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/plans/2026-03-09-cloudflare-worker-terraform.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Confirm Terraform ownership and state approach", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Scaffold the Terraform stack", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: Model the Worker infrastructure", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Add local/operator documentation", "status": "pending", "blockedBy": [1]},
+    {"id": 4, "subject": "Task 4: Add CI validation and PR plan comments", "status": "pending", "blockedBy": [1]},
+    {"id": 5, "subject": "Task 5: Add disabled apply before disabled deploy", "status": "pending", "blockedBy": [4]},
+    {"id": 6, "subject": "Task 6: Verify and document the rollout path", "status": "pending", "blockedBy": [2, 3, 4, 5]}
+  ],
+  "lastUpdated": "2026-03-09T00:00:00Z"
+}
