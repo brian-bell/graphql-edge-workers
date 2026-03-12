@@ -10,6 +10,9 @@ rust-toolchain.toml             # pinned Rust version + wasm target
 workers/
   gql-async-graphql/            # implementation using async-graphql crate
   gql-custom-parser/            # implementation using hand-written parser
+infra/
+  terraform/
+    cloudflare/                 # Cloudflare worker + Access infrastructure
 docs/
   adrs/                         # architecture decision records
   plans/                        # implementation plans + task persistence
@@ -46,6 +49,40 @@ Run native tests from the workspace root:
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo test -p gql-async-graphql
 ```
+
+## Infrastructure
+
+The `gql-async-graphql` worker now has a Terraform stack at
+`infra/terraform/cloudflare`.
+
+Terraform owns:
+
+- the Cloudflare Worker shell and `workers.dev` enablement
+- Worker observability settings
+- a Cloudflare Access application and allow policy protecting the `workers.dev` hostname
+
+Wrangler still owns Worker code deployment.
+
+Shared Terraform state is stored in Cloudflare R2 through the Terraform `s3` backend.
+See `infra/terraform/cloudflare/README.md` for the exact local bootstrap flow.
+
+## CI/CD
+
+The `gql-async-graphql` workflow now:
+
+1. Runs in a prebuilt CI container with Rust, the WASM target, Node/npm, and Terraform installed
+2. Runs Rust tests and the WASM build
+3. Runs `terraform fmt`, `init -backend=false`, and `validate`
+4. Uses the `cloudflare` GitHub environment for Cloudflare and R2 secrets
+5. Runs remote-state Terraform plan steps and PR comments when secrets are available
+6. Runs `terraform apply` before deploy on non-PR runs
+7. Keeps `wrangler deploy` disabled for now
+
+The CI container image is defined at `.github/docker/gql-async-graphql-ci/Dockerfile`
+and published by `.github/workflows/ci-image-gql-async-graphql.yml`.
+
+If the image does not exist yet, run the image workflow once before expecting the worker workflow
+to succeed.
 
 ## Key Constraints
 

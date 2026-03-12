@@ -25,10 +25,20 @@ Pin Rust version via `rust-toolchain.toml` at workspace root.
 Two independent GitHub Actions workflows (one per worker):
 
 1. Trigger: push to `main` with changes in that worker's directory, or manual dispatch
-2. Build: install Rust + wasm target, `cargo test`, `cargo build --release`
-3. Deploy: `wrangler deploy` with Cloudflare API token
+2. Build/test in a prebuilt CI container image with Rust, the WASM target, Node/npm, and Terraform preinstalled
+3. Run Terraform formatting, validation, remote-state plan, and PR plan comments for the active worker stack
+4. Run Terraform apply before deploy on non-PR executions
+5. Keep `wrangler deploy` present but disabled until code deployment is intentionally enabled
 
-Required GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+Required GitHub environment secrets in `cloudflare`:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_WORKERS_DEV_SUBDOMAIN`
+- `CLOUDFLARE_ACCESS_ALLOWED_EMAIL`
+- `R2_STATE_BUCKET`
+- `R2_STATE_ACCESS_KEY_ID`
+- `R2_STATE_SECRET_ACCESS_KEY`
 
 ## Rationale
 
@@ -36,9 +46,13 @@ Required GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 - `rust-toolchain.toml` ensures CI and local builds use the same compiler
 - Path-filtered workflows avoid deploying one worker when only the other changed
 - Manual dispatch enables ad-hoc deploys
+- A prebuilt CI image avoids reinstalling Rust, Terraform, and Node on every run
+- Terraform gives the project declarative control over Cloudflare Worker and Access infrastructure
+- Cloudflare R2 keeps shared Terraform state inside the same provider footprint as the application
 
 ## Consequences
 
 - Developers need rustup, wrangler, and Node.js (wrangler dependency) installed locally
-- CI must install the wasm target explicitly (`rustup target add wasm32-unknown-unknown`)
+- CI now depends on a published GHCR image for the worker workflow container
+- The Terraform backend must be bootstrapped out of band before CI apply can work
 - Each worker deploys independently — no coordinated releases needed
