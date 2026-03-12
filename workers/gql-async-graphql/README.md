@@ -6,7 +6,11 @@ GraphQL flight log API on Cloudflare Workers, built with [`async-graphql`](https
 
 - Rust (stable) with the `wasm32-unknown-unknown` target
 - Node.js (for `wrangler` CLI)
-- An origin API running on `http://localhost:8080`
+- A Supabase project with:
+  - `SUPABASE_URL`
+  - `SUPABASE_PUBLISHABLE_KEY`
+  - Auth enabled for your client
+  - A `flights` table exposed through PostgREST
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -20,8 +24,7 @@ Make sure Cargo is available in your shell:
 export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
-Start the upstream origin API first. This worker reads `ORIGIN_BASE_URL` from `wrangler.toml`,
-which defaults to `http://localhost:8080`.
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `wrangler.toml` (or override them with your local env/secrets as appropriate).
 
 Then start the worker from `workers/gql-async-graphql`:
 
@@ -29,14 +32,14 @@ Then start the worker from `workers/gql-async-graphql`:
 npx wrangler dev
 ```
 
-This starts the worker on `http://localhost:8787`. The origin API URL is configured via `ORIGIN_BASE_URL` in `wrangler.toml`.
+This starts the worker on `http://localhost:8787`.
 
 ### Endpoints
 
 | Method | Path       | Description                |
 |--------|------------|----------------------------|
 | GET    | /health    | Health check               |
-| POST   | /graphql   | GraphQL endpoint           |
+| POST   | /graphql   | Authenticated GraphQL endpoint |
 
 ### Example queries
 
@@ -44,19 +47,24 @@ This starts the worker on `http://localhost:8787`. The origin API URL is configu
 # Health check
 curl http://localhost:8787/health
 
-# List flights
+# List flights with a Supabase access token
+export SUPABASE_ACCESS_TOKEN="your-user-access-token"
+
 curl -X POST http://localhost:8787/graphql \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "{ flights(limit: 5) { id date aircraftTitle } }"}'
 
 # Get a single flight
 curl -X POST http://localhost:8787/graphql \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "{ flight(id: \"abc\") { id date departureIcao arrivalIcao } }"}'
 ```
 
-If `GET /health` succeeds but GraphQL requests fail, check that the upstream origin API is
-running on `http://localhost:8080` or change `ORIGIN_BASE_URL` in `wrangler.toml`.
+`POST /graphql` requires a valid Supabase access-token JWT. The Worker verifies the token against the project's JWKS and forwards the same bearer token to Supabase so RLS applies.
+
+The worker expects the `flights` table to use a `user_id uuid not null` column for ownership. A starter SQL policy file lives at `workers/gql-async-graphql/supabase/rls.sql`.
 
 ## Run tests
 

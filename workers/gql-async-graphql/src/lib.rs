@@ -1,5 +1,7 @@
 use worker::*;
 
+mod auth;
+mod config;
 mod handler;
 mod http_client;
 mod models;

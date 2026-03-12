@@ -6,4 +6,5 @@ compatibility_date = "2026-03-08"
 command = "cargo install -q worker-build && worker-build --release"
 
 [vars]
-ORIGIN_BASE_URL = "http://localhost:8080"
+SUPABASE_URL = "https://your-project-ref.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "your-supabase-publishable-key"

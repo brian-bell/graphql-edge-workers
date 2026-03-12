@@ -3,11 +3,11 @@ use std::sync::OnceLock;
 use http_body_util::{BodyExt, Limited};
 use worker::*;
 
-use crate::http_client::OriginClient;
+use crate::auth::{self, AuthContext, AuthError};
+use crate::config::RuntimeConfig;
+use crate::http_client::{FlightApi, SupabaseClient};
 use crate::schema::{self, FlightSchema};
 
-// WASM is single-threaded, so OnceLock never actually races. The get()
-// fast-path avoids re-reading the env var on every request after init.
 static SCHEMA: OnceLock<FlightSchema> = OnceLock::new();
 
 pub fn health() -> Result<http::Response<String>> {
@@ -22,29 +22,30 @@ pub async fn graphql(
     req: HttpRequest,
     env: Env,
 ) -> Result<http::Response<String>> {
-    let schema = if let Some(s) = SCHEMA.get() {
-        s
-    } else {
-        let origin_base_url = match env.var("ORIGIN_BASE_URL") {
-            Ok(v) => v.to_string(),
-            Err(_) => {
-                return Ok(http::Response::builder()
-                    .status(502)
-                    .header("content-type", "application/json")
-                    .body(r#"{"error":"Service misconfigured"}"#.to_string())
-                    .unwrap());
-            }
-        };
-        let client = OriginClient::new(origin_base_url);
-        SCHEMA.get_or_init(|| schema::build_schema(Box::new(client)))
+    let config = match RuntimeConfig::from_env(&env) {
+        Ok(config) => config,
+        Err(_) => return Ok(service_misconfigured_response()),
     };
 
-    // Fast-reject via Content-Length before reading any bytes
+    let auth = match require_auth(auth::authenticate_headers(req.headers(), &config).await) {
+        Ok(auth) => auth,
+        Err(response) => return Ok(response),
+    };
+
+    graphql_with_auth(req, config, auth).await
+}
+
+async fn graphql_with_auth(
+    req: HttpRequest,
+    config: RuntimeConfig,
+    auth: AuthContext,
+) -> Result<http::Response<String>> {
+    let schema = SCHEMA.get_or_init(schema::build_base_schema);
+
     if let Some(resp) = reject_oversized_body(req.headers()) {
         return Ok(resp);
     }
 
-    // Hard limit during collection — catches missing/lying Content-Length
     let body = match Limited::new(req.into_body(), MAX_BODY_SIZE as usize)
         .collect()
         .await
@@ -70,7 +71,8 @@ pub async fn graphql(
         }
     };
 
-    let gql_response = schema.execute(gql_request).await;
+    let client: Box<dyn FlightApi> = Box::new(SupabaseClient::new(config, auth));
+    let gql_response = schema.execute(gql_request.data(client)).await;
     let response_body = serde_json::to_string(&gql_response).unwrap();
 
     Ok(http::Response::builder()
@@ -80,7 +82,7 @@ pub async fn graphql(
         .unwrap())
 }
 
-const MAX_BODY_SIZE: u64 = 8_192; // 8 KB
+const MAX_BODY_SIZE: u64 = 8_192;
 
 fn reject_oversized_body(headers: &http::HeaderMap) -> Option<http::Response<String>> {
     let len = headers
@@ -104,9 +106,32 @@ fn payload_too_large_response() -> http::Response<String> {
         .unwrap()
 }
 
+fn require_auth(
+    auth: std::result::Result<AuthContext, AuthError>,
+) -> std::result::Result<AuthContext, http::Response<String>> {
+    auth.map_err(|_| unauthorized_response())
+}
+
+fn unauthorized_response() -> http::Response<String> {
+    http::Response::builder()
+        .status(401)
+        .header("content-type", "application/json")
+        .body(r#"{"error":"Unauthorized"}"#.to_string())
+        .unwrap()
+}
+
+fn service_misconfigured_response() -> http::Response<String> {
+    http::Response::builder()
+        .status(502)
+        .header("content-type", "application/json")
+        .body(r#"{"error":"Service misconfigured"}"#.to_string())
+        .unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::AuthError;
 
     #[test]
     fn rejects_body_over_8kb() {
@@ -141,5 +166,20 @@ mod tests {
         let mut headers = http::HeaderMap::new();
         headers.insert("content-length", "not-a-number".parse().unwrap());
         assert!(reject_oversized_body(&headers).is_none());
+    }
+
+    #[test]
+    fn graphql_requires_authorization_header() {
+        let response = require_auth(Err(AuthError::MissingAuthorization)).unwrap_err();
+        assert_eq!(response.status(), 401);
+    }
+
+    #[test]
+    fn graphql_rejects_invalid_authorization_header() {
+        let response = require_auth(Err(AuthError::InvalidToken(
+            "signature verification failed".to_string(),
+        )))
+        .unwrap_err();
+        assert_eq!(response.status(), 401);
     }
 }
