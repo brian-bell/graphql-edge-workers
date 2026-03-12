@@ -2,12 +2,15 @@ name: gql-async-graphql
 
 permissions:
   contents: read
+  packages: read
   pull-requests: write
 
 on:
   push:
     branches: [main]
     paths:
+      - '.github/docker/gql-async-graphql-ci/**'
+      - '.github/workflows/gql-async-graphql.yml'
       - 'infra/terraform/cloudflare/**'
       - 'workers/gql-async-graphql/**'
       - 'Cargo.toml'
@@ -15,6 +18,8 @@ on:
       - 'rust-toolchain.toml'
   pull_request:
     paths:
+      - '.github/docker/gql-async-graphql-ci/**'
+      - '.github/workflows/gql-async-graphql.yml'
       - 'infra/terraform/cloudflare/**'
       - 'workers/gql-async-graphql/**'
       - 'Cargo.toml'
@@ -26,22 +31,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: cloudflare
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/gql-async-graphql-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
     env:
       TF_IN_AUTOMATION: "true"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
       - name: Cache cargo registry and build
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+            /usr/local/cargo/registry
+            /usr/local/cargo/git
             target
           key: ${{ runner.os }}-cargo-async-graphql-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-async-graphql-
@@ -51,9 +59,6 @@ jobs:
 
       - name: Build
         run: cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
-
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform fmt
         working-directory: infra/terraform/cloudflare
