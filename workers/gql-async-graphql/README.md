@@ -6,12 +6,24 @@ GraphQL flight log API on Cloudflare Workers, built with [`async-graphql`](https
 
 - Rust (stable) with the `wasm32-unknown-unknown` target
 - Node.js (for `wrangler` CLI)
+- An origin API running on `http://localhost:8080`
 
 ```sh
 rustup target add wasm32-unknown-unknown
 ```
 
 ## Run locally
+
+Make sure Cargo is available in your shell:
+
+```sh
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+Start the upstream origin API first. This worker reads `ORIGIN_BASE_URL` from `wrangler.toml`,
+which defaults to `http://localhost:8080`.
+
+Then start the worker from `workers/gql-async-graphql`:
 
 ```sh
 npx wrangler dev
@@ -43,11 +55,15 @@ curl -X POST http://localhost:8787/graphql \
   -d '{"query": "{ flight(id: \"abc\") { id date departureIcao arrivalIcao } }"}'
 ```
 
+If `GET /health` succeeds but GraphQL requests fail, check that the upstream origin API is
+running on `http://localhost:8080` or change `ORIGIN_BASE_URL` in `wrangler.toml`.
+
 ## Run tests
 
-Native unit tests (runs on host, not WASM):
+Native unit tests run on the host, not in WASM. Run them from the workspace root:
 
 ```sh
+export PATH="$HOME/.cargo/bin:$PATH"
 cargo test -p gql-async-graphql
 ```
 
