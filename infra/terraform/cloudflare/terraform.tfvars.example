@@ -1,0 +1,5 @@
+cloudflare_account_id         = "replace-with-account-id"
+workers_dev_account_subdomain = "replace-with-workers-dev-subdomain"
+access_allowed_email          = "you@example.com"
+worker_name                   = "gql-async-graphql"
+environment                   = "prod"

@@ -1,15 +1,21 @@
 name: gql-async-graphql
 
+permissions:
+  contents: read
+  pull-requests: write
+
 on:
   push:
     branches: [main]
     paths:
+      - 'infra/terraform/cloudflare/**'
       - 'workers/gql-async-graphql/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
   pull_request:
     paths:
+      - 'infra/terraform/cloudflare/**'
       - 'workers/gql-async-graphql/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -19,6 +25,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +50,195 @@ jobs:
 
       - name: Build
         run: cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        working-directory: infra/terraform/cloudflare
+        run: terraform fmt -check
+
+      - name: Terraform init (validation)
+        working-directory: infra/terraform/cloudflare
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: infra/terraform/cloudflare
+        run: terraform validate
+
+      - name: Check Terraform plan configuration
+        id: tf-plan-config
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          missing=0
+          for value in \
+            "${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            "${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}" \
+            "${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAIL }}" \
+            "${{ secrets.R2_STATE_BUCKET }}" \
+            "${{ secrets.R2_STATE_ACCESS_KEY_ID }}" \
+            "${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}"; do
+            if [ -z "$value" ]; then
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -eq 1 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write Terraform backend config for CI
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.tf-plan-config.outputs.ready == 'true'
+        working-directory: infra/terraform/cloudflare
+        run: |
+          cat <<EOF > ci.backend.hcl
+          bucket                      = "${{ secrets.R2_STATE_BUCKET }}"
+          key                         = "prod/cloudflare-worker.tfstate"
+          region                      = "auto"
+          use_lockfile                = true
+          use_path_style              = true
+          skip_credentials_validation = true
+          skip_metadata_api_check     = true
+          skip_region_validation      = true
+          skip_requesting_account_id  = true
+          skip_s3_checksum            = true
+          endpoints = {
+            s3 = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          }
+          EOF
+
+      - name: Terraform init (remote state)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.tf-plan-config.outputs.ready == 'true'
+        working-directory: infra/terraform/cloudflare
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+        run: terraform init -reconfigure -backend-config=ci.backend.hcl
+
+      - name: Terraform plan
+        id: tf-plan
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.tf-plan-config.outputs.ready == 'true'
+        working-directory: infra/terraform/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_workers_dev_account_subdomain: ${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}
+          TF_VAR_access_allowed_email: ${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAIL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+        run: |
+          set +e
+          terraform plan -input=false -lock-timeout=60s -no-color -detailed-exitcode -out=tfplan
+          exitcode=$?
+          set -e
+
+          if [ "$exitcode" -eq 1 ]; then
+            exit 1
+          fi
+
+          terraform show -no-color tfplan > terraform-plan.txt
+          echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+
+      - name: Build Terraform PR comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.tf-plan-config.outputs.ready == 'true'
+        working-directory: infra/terraform/cloudflare
+        run: |
+          max_lines=600
+          actual_lines=$(wc -l < terraform-plan.txt)
+          truncated_note=""
+
+          if [ "$actual_lines" -gt "$max_lines" ]; then
+            sed -n "1,${max_lines}p" terraform-plan.txt > terraform-plan-comment.txt
+            truncated_note="_Plan truncated in PR comment after ${max_lines} lines. See the workflow artifact for the full output._"
+          else
+            cp terraform-plan.txt terraform-plan-comment.txt
+          fi
+
+          if [ "${{ steps.tf-plan.outputs.exitcode }}" = "2" ]; then
+            status_line="Changes detected"
+          else
+            status_line="No changes"
+          fi
+
+          {
+            echo "<!-- terraform-plan:gql-async-graphql -->"
+            echo "## Terraform Plan (`gql-async-graphql`)"
+            echo
+            echo "- Status: ${status_line}"
+            echo "- Stack: \`infra/terraform/cloudflare\`"
+            echo
+            if [ -n "$truncated_note" ]; then
+              echo "$truncated_note"
+              echo
+            fi
+            echo "<details><summary>Show plan</summary>"
+            echo
+            echo '```diff'
+            cat terraform-plan-comment.txt
+            echo '```'
+            echo
+            echo "</details>"
+          } > terraform-plan-comment.md
+
+      - name: Upload Terraform plan artifact
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.tf-plan-config.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gql-async-graphql-terraform-plan
+          path: infra/terraform/cloudflare/terraform-plan.txt
+
+      - name: Comment Terraform plan on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.tf-plan-config.outputs.ready == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('infra/terraform/cloudflare/terraform-plan-comment.md', 'utf8');
+            const marker = '<!-- terraform-plan:gql-async-graphql -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Terraform Apply
+        if: false # disabled until the R2 backend and CI secrets are configured for shared state
+        working-directory: infra/terraform/cloudflare
+        run: terraform apply -input=false -auto-approve tfplan
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_workers_dev_account_subdomain: ${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}
+          TF_VAR_access_allowed_email: ${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAIL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
 
       - name: Deploy to Cloudflare
         if: false # disabled until Cloudflare secrets are configured
