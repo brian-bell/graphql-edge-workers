@@ -75,6 +75,10 @@ The workflow uses those values to:
 - run Terraform plan on pull requests and post a sticky PR comment
 - run Terraform apply on non-PR executions before the deploy step
 
+The Terraform job is attached to the `cloudflare` GitHub environment and only runs when files under
+`infra/terraform/cloudflare/**` change, unless the workflow is started manually with
+`workflow_dispatch`.
+
 ## Local Workflow
 
 Initialize against the remote R2 backend:

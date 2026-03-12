@@ -70,12 +70,12 @@ See `infra/terraform/cloudflare/README.md` for the exact local bootstrap flow.
 
 The `gql-async-graphql` workflow now:
 
-1. Runs in a prebuilt CI container with Rust, the WASM target, Node/npm, and Terraform installed
-2. Runs Rust tests and the WASM build
-3. Runs `terraform fmt`, `init -backend=false`, and `validate`
-4. Uses the `cloudflare` GitHub environment for Cloudflare and R2 secrets
+1. Detects whether the change set affects worker build paths or Terraform paths
+2. Runs the Rust build job in a prebuilt CI container with Rust, the WASM target, Node/npm, and Terraform installed
+3. Runs the Terraform job separately, attached to the `cloudflare` GitHub environment
+4. Only runs the Terraform job for `infra/terraform/cloudflare/**` changes or manual dispatch
 5. Runs remote-state Terraform plan steps and PR comments when secrets are available
-6. Runs `terraform apply` before deploy on non-PR runs
+6. Runs `terraform apply` before deploy on non-PR Terraform runs
 7. Keeps `wrangler deploy` disabled for now
 
 The CI container image is defined at `.github/docker/gql-async-graphql-ci/Dockerfile`

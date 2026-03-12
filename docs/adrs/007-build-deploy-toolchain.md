@@ -25,10 +25,11 @@ Pin Rust version via `rust-toolchain.toml` at workspace root.
 Two independent GitHub Actions workflows (one per worker):
 
 1. Trigger: push to `main` with changes in that worker's directory, or manual dispatch
-2. Build/test in a prebuilt CI container image with Rust, the WASM target, Node/npm, and Terraform preinstalled
-3. Run Terraform formatting, validation, remote-state plan, and PR plan comments for the active worker stack
-4. Run Terraform apply before deploy on non-PR executions
-5. Keep `wrangler deploy` present but disabled until code deployment is intentionally enabled
+2. Detect changed paths and split worker build/test from Terraform infrastructure work
+3. Build/test in a prebuilt CI container image with Rust, the WASM target, Node/npm, and Terraform preinstalled
+4. Run Terraform in a separate job attached to the `cloudflare` GitHub environment only when the Terraform stack changes, or on manual dispatch
+5. Run Terraform apply before deploy on non-PR executions
+6. Keep `wrangler deploy` present but disabled until code deployment is intentionally enabled
 
 Required GitHub environment secrets in `cloudflare`:
 
