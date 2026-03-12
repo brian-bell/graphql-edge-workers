@@ -130,7 +130,7 @@ impl SupabaseClient {
         Ok(PreparedRequest {
             method: Method::Get,
             url,
-            headers: common_headers(&self.config, &self.auth, None),
+            headers: common_headers(&self.config, &self.auth, false, None),
             body: None,
         })
     }
@@ -155,7 +155,7 @@ impl SupabaseClient {
         Ok(PreparedRequest {
             method,
             url,
-            headers: common_headers(&self.config, &self.auth, prefer),
+            headers: common_headers(&self.config, &self.auth, body.is_some(), prefer),
             body,
         })
     }
@@ -295,6 +295,7 @@ impl FlightsQuery {
 fn common_headers(
     config: &RuntimeConfig,
     auth: &AuthContext,
+    has_body: bool,
     prefer: Option<&str>,
 ) -> Vec<(String, String)> {
     let mut headers = vec![
@@ -305,7 +306,7 @@ fn common_headers(
         ),
     ];
 
-    if prefer.is_some() {
+    if has_body {
         headers.push(("content-type".to_string(), "application/json".to_string()));
     }
 
