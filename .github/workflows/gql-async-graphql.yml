@@ -287,7 +287,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
 
       - name: Deploy to Cloudflare
-        if: false # disabled until Cloudflare secrets are configured
         working-directory: workers/gql-async-graphql
         run: npx wrangler deploy
         env:
