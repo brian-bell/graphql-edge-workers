@@ -65,6 +65,7 @@ pub struct DecodedJwt {
 pub struct JwtClaims {
     pub sub: String,
     pub iss: String,
+    pub aud: String,
     pub exp: u64,
 }
 
@@ -206,6 +207,10 @@ fn validate_claims(
 
     if normalize_issuer(&claims.iss) != normalize_issuer(&config.jwt_issuer()) {
         return Err(AuthError::InvalidToken("issuer mismatch".to_string()));
+    }
+
+    if claims.aud != config.jwt_audience() {
+        return Err(AuthError::InvalidToken("audience mismatch".to_string()));
     }
 
     Ok(())
@@ -569,6 +574,7 @@ mod tests {
         let claims = serde_json::json!({
             "sub": "user-123",
             "iss": "https://example.supabase.co/auth/v1",
+            "aud": "authenticated",
             "exp": now_unix_timestamp() + 60,
         });
         let header = serde_json::json!({
@@ -622,6 +628,7 @@ mod tests {
             serde_json::json!({
                 "sub": "user-123",
                 "iss": "https://example.supabase.co/auth/v1",
+                "aud": "authenticated",
                 "exp": now_unix_timestamp() - 1,
             }),
             serde_json::json!({
@@ -646,11 +653,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_wrong_audience() {
+        let token = make_token(
+            serde_json::json!({
+                "sub": "user-123",
+                "iss": "https://example.supabase.co/auth/v1",
+                "aud": "anon",
+                "exp": now_unix_timestamp() + 60,
+            }),
+            serde_json::json!({
+                "alg": "RS256",
+                "kid": "test-key",
+            }),
+        );
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+
+        let err = authenticate_headers_with(&headers, &test_config(), |_, _| async { Ok(()) })
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            AuthError::InvalidToken("audience mismatch".to_string()),
+        );
+    }
+
+    #[tokio::test]
     async fn rejects_invalid_signature_from_verifier() {
         let token = make_token(
             serde_json::json!({
                 "sub": "user-123",
                 "iss": "https://example.supabase.co/auth/v1",
+                "aud": "authenticated",
                 "exp": now_unix_timestamp() + 60,
             }),
             serde_json::json!({

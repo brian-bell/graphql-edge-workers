@@ -49,6 +49,10 @@ impl RuntimeConfig {
         format!("{}/auth/v1", self.supabase_url)
     }
 
+    pub fn jwt_audience(&self) -> &str {
+        "authenticated"
+    }
+
     pub fn jwks_url(&self) -> String {
         format!("{}/auth/v1/.well-known/jwks.json", self.supabase_url)
     }
