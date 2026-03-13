@@ -296,7 +296,6 @@ jobs:
     needs:
       - changes
       - build
-      - terraform
     if: |
       always() &&
       github.event_name != 'pull_request' &&
@@ -305,8 +304,7 @@ jobs:
         needs.changes.outputs.terraform == 'true' ||
         github.event_name == 'workflow_dispatch'
       ) &&
-      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
-      (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     environment: cloudflare
     container:
