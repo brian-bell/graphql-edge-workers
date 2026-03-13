@@ -78,6 +78,11 @@ impl MutationRoot {
 
 pub type FlightSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
+pub fn build_base_schema() -> FlightSchema {
+    Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish()
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn build_schema(client: Box<dyn FlightApi>) -> FlightSchema {
     Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(client)
