@@ -1,6 +1,6 @@
 # Rust GraphQL on Cloudflare Workers
 
-Comparative study of two GraphQL server implementations in Rust targeting Cloudflare Workers (WASM). Once evaluated, the chosen approach becomes the production server. Both serve a flight log schema and resolve data via HTTP calls to an upstream origin API.
+GraphQL flight log API built in Rust, deployed to Cloudflare Workers (WASM). Data lives in Supabase (Postgres + PostgREST); the worker authenticates requests via Supabase JWT and forwards tokens so Row-Level Security enforces per-user isolation.
 
 ## Repo Structure
 
@@ -19,74 +19,56 @@ docs/
 .github/workflows/              # one CI/CD workflow per worker
 ```
 
-## Local Development
+## Quick Start
 
-The `gql-async-graphql` worker currently has the only implemented local service flow in this repo.
-It serves on `http://localhost:8787` and proxies resolver requests to an upstream origin API at
-`http://localhost:8080`.
+### Prerequisites
 
-Start the worker from the workspace root:
+- Rust (stable) with the `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
+- Node.js (for the `wrangler` CLI)
+- A Supabase project with a `flights` table exposed through PostgREST
+
+### Run locally
+
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `workers/gql-async-graphql/wrangler.toml`, then:
 
 ```sh
-export PATH="$HOME/.cargo/bin:$PATH"
 cd workers/gql-async-graphql
 npx wrangler dev
 ```
 
-Verify the worker:
+### Example requests
 
 ```sh
+# Health check
 curl http://localhost:8787/health
 
+# Query flights (requires a Supabase access token)
 curl -X POST http://localhost:8787/graphql \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"{ flights(limit: 5) { id date aircraftTitle } }"}'
+  -d '{"query": "{ flights(limit: 5) { id date aircraftTitle } }"}'
 ```
 
-Run native tests from the workspace root:
+## Run Tests
 
 ```sh
-export PATH="$HOME/.cargo/bin:$PATH"
 cargo test -p gql-async-graphql
 ```
 
-## Infrastructure
+## Architecture
 
-The `gql-async-graphql` worker now has a Terraform stack at
-`infra/terraform/cloudflare`.
+- Each worker crate is independent — no shared crates or cross-dependencies
+- Resolvers call Supabase PostgREST over HTTP; no direct database access
+- JWT auth verified against the Supabase project JWKS; token forwarded for RLS
+- Service-to-service auth uses dedicated Supabase user accounts — see [ADR 008](docs/adrs/008-service-to-service-auth.md)
+- See `docs/adrs/` for all architecture decision records
 
-Terraform owns:
+## Documentation
 
-- the Cloudflare Worker shell and `workers.dev` enablement
-- Worker observability settings
-- a Cloudflare Access application and allow policy protecting the `workers.dev` hostname
-
-Wrangler still owns Worker code deployment.
-
-Shared Terraform state is stored in Cloudflare R2 through the Terraform `s3` backend.
-See `infra/terraform/cloudflare/README.md` for the exact local bootstrap flow.
-
-## CI/CD
-
-The `gql-async-graphql` workflow now:
-
-1. Detects whether the change set affects worker build paths or Terraform paths
-2. Runs the Rust build job in a prebuilt CI container with Rust, the WASM target, Node/npm, and Terraform installed
-3. Runs the Terraform job separately, attached to the `cloudflare` GitHub environment
-4. Only runs the Terraform job for `infra/terraform/cloudflare/**` changes or manual dispatch
-5. Runs remote-state Terraform plan steps and PR comments when secrets are available
-6. Runs `terraform apply` before deploy on non-PR Terraform runs
-7. Keeps `wrangler deploy` disabled for now
-
-The CI container image is defined at `.github/docker/gql-async-graphql-ci/Dockerfile`
-and published by `.github/workflows/ci-image-gql-async-graphql.yml`.
-
-If the image does not exist yet, run the image workflow once before expecting the worker workflow
-to succeed.
-
-## Key Constraints
-
-- Each worker crate is fully independent — no shared crates or cross-dependencies
-- Resolvers only make HTTP calls to the origin API, no direct DB access
-- See `docs/adrs/` for all architectural decisions
-- See `docs/plans/` for implementation plans
+| Path | Description |
+|---|---|
+| `docs/adrs/` | Architecture decision records |
+| `docs/plans/` | Implementation plans |
+| `docs/file-reference.md` | Purpose of every file in the repo |
+| `workers/gql-async-graphql/README.md` | Worker dev guide — Supabase setup, endpoints, curl examples, deploy |
+| `AGENTS.md` | Instructions for AI coding agents |

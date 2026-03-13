@@ -66,6 +66,26 @@ curl -X POST http://localhost:8787/graphql \
 
 The worker expects the `flights` table to use a `user_id uuid not null` column for ownership. A starter SQL policy file lives at `workers/gql-async-graphql/supabase/rls.sql`.
 
+## Service-to-service auth
+
+For daemon or backend services that need to call the GraphQL API (e.g. a Python service running as a Windows daemon), use a dedicated Supabase user account:
+
+1. Create a service account user in your Supabase project (e.g. `daemon@yourorg.internal` with a strong password).
+2. On startup, sign in via the Supabase Auth REST API:
+   ```
+   POST {SUPABASE_URL}/auth/v1/token?grant_type=password
+   ```
+   with the service account's email and password to obtain an access token and refresh token.
+3. Use the access token as `Authorization: Bearer <token>` for all GraphQL requests.
+4. Refresh the token before it expires (default 1 hour) using the refresh token:
+   ```
+   POST {SUPABASE_URL}/auth/v1/token?grant_type=refresh_token
+   ```
+
+This approach requires no changes to the worker. The service account's JWT validates through the same JWKS flow as interactive users, and RLS scopes data to the service account's `user_id`.
+
+Store the service account credentials securely (e.g. Windows Credential Manager, environment variables, or a secrets manager). Do not hard-code them.
+
 ## Run tests
 
 Native unit tests run on the host, not in WASM. Run them from the workspace root:
