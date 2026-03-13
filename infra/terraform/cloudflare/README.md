@@ -69,11 +69,18 @@ The workflow uses those values to:
 
 - initialize the remote R2 backend
 - run Terraform plan on pull requests and post a sticky PR comment
-- run Terraform apply on non-PR executions before the deploy step
+- run Terraform apply on non-PR executions
+- run a separate Wrangler deploy job after successful Terraform changes or worker code changes
 
 The Terraform job is attached to the `cloudflare` GitHub environment and only runs when files under
 `infra/terraform/cloudflare/**` change, unless the workflow is started manually with
 `workflow_dispatch`.
+
+The Cloudflare deploy job is separate from Terraform. It runs on non-PR executions when either:
+
+- files under `infra/terraform/cloudflare/**` change
+- worker source or build inputs under `workers/gql-async-graphql/**`, `Cargo.toml`, `Cargo.lock`, or `rust-toolchain.toml` change
+- the workflow is started manually with `workflow_dispatch`
 
 ## Local Workflow
 
