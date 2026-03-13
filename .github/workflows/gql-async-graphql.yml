@@ -124,7 +124,6 @@ jobs:
             "${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
             "${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}" \
-            "${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAIL }}" \
             "${{ secrets.R2_STATE_BUCKET }}" \
             "${{ secrets.R2_STATE_ACCESS_KEY_ID }}" \
             "${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}"; do
@@ -175,7 +174,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_workers_dev_account_subdomain: ${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}
-          TF_VAR_access_allowed_email: ${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAIL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
         run: |
@@ -285,7 +283,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_workers_dev_account_subdomain: ${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}
-          TF_VAR_access_allowed_email: ${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAIL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
 
