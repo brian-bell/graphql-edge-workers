@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.filter.outputs.build }}
+      worker: ${{ steps.filter.outputs.worker }}
       terraform: ${{ steps.filter.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +47,11 @@ jobs:
             build:
               - '.github/docker/gql-async-graphql-ci/**'
               - '.github/workflows/gql-async-graphql.yml'
+              - 'workers/gql-async-graphql/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+            worker:
               - 'workers/gql-async-graphql/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
@@ -285,6 +291,34 @@ jobs:
           TF_VAR_workers_dev_account_subdomain: ${{ secrets.CLOUDFLARE_WORKERS_DEV_SUBDOMAIN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+
+  deploy:
+    needs:
+      - changes
+      - build
+      - terraform
+    if: |
+      always() &&
+      github.event_name != 'pull_request' &&
+      (
+        needs.changes.outputs.worker == 'true' ||
+        needs.changes.outputs.terraform == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: cloudflare
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/gql-async-graphql-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Deploy to Cloudflare
         working-directory: workers/gql-async-graphql
