@@ -76,8 +76,11 @@ cargo build --target wasm32-unknown-unknown --release -p gql-async-graphql
 ## Deploy
 
 Cloudflare infrastructure for this worker is managed by Terraform in
-`infra/terraform/cloudflare`. That stack creates the Worker shell and protects the `workers.dev`
-hostname with Cloudflare Access. Wrangler is still used to upload the Worker code itself.
+`infra/terraform/cloudflare`. That stack creates the Worker shell and configures `workers.dev`.
+Wrangler is still used to upload the Worker code itself.
+
+If you want to protect the `workers.dev` hostname with Cloudflare Access, enable that in the
+Cloudflare dashboard after the Worker exists.
 
 ```sh
 cd workers/gql-async-graphql

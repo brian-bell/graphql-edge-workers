@@ -36,7 +36,6 @@ Required GitHub environment secrets in `cloudflare`:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_WORKERS_DEV_SUBDOMAIN`
-- `CLOUDFLARE_ACCESS_ALLOWED_EMAIL`
 - `R2_STATE_BUCKET`
 - `R2_STATE_ACCESS_KEY_ID`
 - `R2_STATE_SECRET_ACCESS_KEY`
@@ -48,7 +47,7 @@ Required GitHub environment secrets in `cloudflare`:
 - Path-filtered workflows avoid deploying one worker when only the other changed
 - Manual dispatch enables ad-hoc deploys
 - A prebuilt CI image avoids reinstalling Rust, Terraform, and Node on every run
-- Terraform gives the project declarative control over Cloudflare Worker and Access infrastructure
+- Terraform gives the project declarative control over Cloudflare Worker infrastructure
 - Cloudflare R2 keeps shared Terraform state inside the same provider footprint as the application
 
 ## Consequences
@@ -56,4 +55,5 @@ Required GitHub environment secrets in `cloudflare`:
 - Developers need rustup, wrangler, and Node.js (wrangler dependency) installed locally
 - CI now depends on a published GHCR image for the worker workflow container
 - The Terraform backend must be bootstrapped out of band before CI apply can work
+- `workers.dev` Cloudflare Access remains a manual dashboard configuration rather than a Terraform-managed resource
 - Each worker deploys independently — no coordinated releases needed

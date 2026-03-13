@@ -4,18 +4,16 @@ This stack manages the Cloudflare-side infrastructure for the `gql-async-graphql
 
 - the Worker shell and workers.dev subdomain settings
 - Worker observability settings
-- a Cloudflare Access application and reusable policy protecting the `workers.dev` hostname
 
 Wrangler still deploys the Worker code. Terraform does not upload the Worker bundle in this setup.
 
 ## Prerequisites
 
 - Terraform `>= 1.8`
-- A Cloudflare API token with Worker and Access write access for the target account
+- A Cloudflare API token with Worker write access for the target account
 - An existing R2 bucket for Terraform state
 - R2 API credentials for the state bucket
 - The account-level `workers.dev` subdomain value for the Cloudflare account
-- An email address that should be allowed through Cloudflare Access
 
 ## Files
 
@@ -36,7 +34,6 @@ Terraform inputs:
 ```sh
 export TF_VAR_cloudflare_account_id=...
 export TF_VAR_workers_dev_account_subdomain=...
-export TF_VAR_access_allowed_email=...
 export TF_VAR_worker_name=gql-async-graphql
 ```
 
@@ -54,8 +51,8 @@ For this hobby project, creating the bucket and API token outside Terraform is a
 
 Copy `backend.hcl.example` to `backend.hcl` and fill in the real values.
 
-If the Worker or Access resources already exist in Cloudflare, import them before the first apply
-instead of trying to recreate them blindly.
+If the Worker resource already exists in Cloudflare, import it before the first apply instead of
+trying to recreate it blindly.
 
 ## GitHub Actions Secrets
 
@@ -64,7 +61,6 @@ The `gql-async-graphql` workflow expects these secrets in the `cloudflare` GitHu
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_WORKERS_DEV_SUBDOMAIN`
-- `CLOUDFLARE_ACCESS_ALLOWED_EMAIL`
 - `R2_STATE_BUCKET`
 - `R2_STATE_ACCESS_KEY_ID`
 - `R2_STATE_SECRET_ACCESS_KEY`
@@ -99,16 +95,18 @@ If you are using exported `TF_VAR_*` environment variables, `terraform plan` wil
 automatically. If you prefer a local variables file, copy `terraform.tfvars.example` to your own
 untracked file and pass it with `-var-file`.
 
-## What Gets Protected
+## workers.dev Access
 
-The Access application targets:
+Cloudflare Access for `workers.dev` is not managed by this Terraform stack.
 
-```text
-https://<worker_name>.<workers_dev_account_subdomain>.workers.dev
-```
+Use the Cloudflare dashboard after the Worker exists:
 
-The first-pass policy allows a single email address. If you later need automation clients,
-add Access service tokens rather than opening the endpoint publicly.
+1. Open `Workers & Pages`
+2. Select the Worker
+3. Open `Settings > Domains & Routes`
+4. Enable Cloudflare Access for the `workers.dev` hostname
+
+This is separate from the generic Zero Trust Access application API used for custom domains.
 
 ## CI Container
 

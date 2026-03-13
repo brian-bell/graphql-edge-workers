@@ -1,5 +1,5 @@
 variable "cloudflare_account_id" {
-  description = "Cloudflare account ID that owns the Worker and Zero Trust resources."
+  description = "Cloudflare account ID that owns the Worker resources."
   type        = string
 }
 
@@ -11,11 +11,6 @@ variable "worker_name" {
 
 variable "workers_dev_account_subdomain" {
   description = "Account-level workers.dev subdomain prefix, without the trailing .workers.dev."
-  type        = string
-}
-
-variable "access_allowed_email" {
-  description = "Email address allowed through the Cloudflare Access policy."
   type        = string
 }
 
@@ -46,10 +41,4 @@ variable "observability_head_sampling_rate" {
     condition     = var.observability_head_sampling_rate >= 0 && var.observability_head_sampling_rate <= 1
     error_message = "observability_head_sampling_rate must be between 0 and 1."
   }
-}
-
-variable "access_session_duration" {
-  description = "Cloudflare Access session duration."
-  type        = string
-  default     = "24h"
 }
