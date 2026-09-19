@@ -20,7 +20,8 @@ Purpose of every file in the repository, excluding the `docs/` directory.
 
 | File | Purpose |
 |---|---|
-| `gql-async-graphql.yml` | CI/CD pipeline for the async-graphql worker. Triggers on pushes to `main` (scoped to relevant paths) and PRs. Installs Rust + WASM target, runs `cargo test`, builds `--target wasm32-unknown-unknown --release`. Deploy step exists but is disabled pending Cloudflare secrets. |
+| `gql-async-graphql.yml` | CI pipeline for the async-graphql worker. Triggers on pushes to `main` (scoped to relevant paths), PRs, and manual dispatch. Runs in the prebuilt CI container: `cargo test`, then builds `--target wasm32-unknown-unknown --release`. No Terraform or deploy. |
+| `ci-image-gql-async-graphql.yml` | Builds and publishes the CI container image to GHCR. |
 
 ---
 
