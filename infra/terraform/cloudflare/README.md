@@ -54,33 +54,9 @@ Copy `backend.hcl.example` to `backend.hcl` and fill in the real values.
 If the Worker resource already exists in Cloudflare, import it before the first apply instead of
 trying to recreate it blindly.
 
-## GitHub Actions Secrets
+## CI
 
-The `gql-async-graphql` workflow expects these secrets in the `cloudflare` GitHub environment:
-
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_WORKERS_DEV_SUBDOMAIN`
-- `R2_STATE_BUCKET`
-- `R2_STATE_ACCESS_KEY_ID`
-- `R2_STATE_SECRET_ACCESS_KEY`
-
-The workflow uses those values to:
-
-- initialize the remote R2 backend
-- run Terraform plan on pull requests and post a sticky PR comment
-- run Terraform apply on non-PR executions
-- run a separate Wrangler deploy job after successful Terraform changes or worker code changes
-
-The Terraform job is attached to the `cloudflare` GitHub environment and only runs when files under
-`infra/terraform/cloudflare/**` change, unless the workflow is started manually with
-`workflow_dispatch`.
-
-The Cloudflare deploy job is separate from Terraform. It runs on non-PR executions when either:
-
-- files under `infra/terraform/cloudflare/**` change
-- worker source or build inputs under `workers/gql-async-graphql/**`, `Cargo.toml`, `Cargo.lock`, or `rust-toolchain.toml` change
-- the workflow is started manually with `workflow_dispatch`
+GitHub Actions does not run Terraform or deploy the Worker. Plan and apply this stack locally.
 
 ## Local Workflow
 
